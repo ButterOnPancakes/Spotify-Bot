@@ -1,15 +1,27 @@
-import dotenv
 import base64
 import requests
 import json
+import os
+
+from os.path import join, dirname
+from dotenv import load_dotenv
+
+from syrics.api import Spotify
+
 
 def get_token():
-    client_id = dotenv.get_variable('.variables', 'CLIENT_ID')
-    client_secret = dotenv.get_variable('.variables', 'CLIENT_SECRET')
+    dotenv_path = join(dirname(__file__), '.env')
+    load_dotenv(dotenv_path)
 
-    auth_string = client_id + ":" + client_secret
+    client_id = os.environ.get('CLIENT_ID')
+    client_secret = os.environ.get('CLIENT_SECRET')
+
+    if not client_id or not client_secret:
+        raise Exception("CLIENT_ID or CLIENT_SECRET not found in environment variables")
+
+    auth_string = f"{client_id}:{client_secret}"
     auth_bytes = auth_string.encode('utf-8')
-    auth_base64 = str(base64.b64encode(auth_bytes), 'utf-8')
+    auth_base64 = base64.b64encode(auth_bytes).decode('utf-8')
     
     url = 'https://accounts.spotify.com/api/token'
     headers = {
@@ -17,10 +29,15 @@ def get_token():
         'Content-Type': 'application/x-www-form-urlencoded'
     }
     data = {'grant_type': 'client_credentials'}
-    result = requests.post(url, headers=headers, data=data)
-    json_results = json.loads(result.content)
-    token = json_results['access_token']
-    return token
+    
+    try:
+        result = requests.post(url, headers=headers, data=data, timeout=10)
+        result.raise_for_status()  # Raises HTTPError for bad responses
+        json_results = result.json()
+        token = json_results['access_token']
+        return token
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"Failed to get Spotify token: {e}")
 
 def get_auth_headers(token):
     return {'Authorization': 'Bearer ' + token}
@@ -32,24 +49,32 @@ def search_artist(token, artist_name):
     
     query_url = url + query
     
-    result = requests.get(query_url, headers=headers)
-    json_results = json.loads(result.content)
-    artists = json_results['artists']['items']
-    
-    if len(artists) == 0:
-        raise Exception(f'No artists called "{artist_name}" has been found in the spotify api.')
-    
-    return artists[0]
+    try:
+        result = requests.get(query_url, headers=headers, timeout=10)
+        result.raise_for_status()
+        json_results = result.json()
+        artists = json_results['artists']['items']
+        
+        if len(artists) == 0:
+            raise Exception(f'No artists called "{artist_name}" has been found in the spotify api.')
+        
+        return artists[0]
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"Failed to search artist: {e}")
 
 def get_songs_by_artist(token, artist_id):
     url = f'https://api.spotify.com/v1/artists/{artist_id}/top-tracks?country=US'
     headers = get_auth_headers(token)
     
-    result = requests.get(url, headers=headers)
-    json_results = json.loads(result.content)
-    tracks = json_results['tracks']
-    
-    return tracks
+    try:
+        result = requests.get(url, headers=headers, timeout=10)
+        result.raise_for_status()
+        json_results = result.json()
+        tracks = json_results['tracks']
+        
+        return tracks
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"Failed to get artist tracks: {e}")
 
 def get_song_by_name(token, song_name):
     url = 'https://api.spotify.com/v1/search'
@@ -58,22 +83,34 @@ def get_song_by_name(token, song_name):
     
     query_url = url + query
     
-    result = requests.get(query_url, headers=headers)
-    json_results = json.loads(result.content)
-    tracks = json_results['tracks']['items']
-    
-    return tracks
+    try:
+        result = requests.get(query_url, headers=headers, timeout=10)
+        result.raise_for_status()
+        json_results = result.json()
+        tracks = json_results['tracks']['items']
+        
+        if not tracks:
+            raise Exception(f"No tracks found for '{song_name}'")
+            
+        return tracks
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"Failed to search song: {e}")
 
 def get_songs_subtitles(song_id):
-    url = f'https://spotify-lyric-api.herokuapp.com/?trackid={song_id}'
-    
-    result = requests.get(url)
-    json_results = json.loads(result.content)
-    
-    if(json_results['error'] == True):
-        raise Exception(json_results['message'])
-    
-    if(json_results['syncType'] == 'UNSYNCED'):
-        print('Time codes are not synced. Be careful when using it')
-    
-    return json_results
+    dotenv_path = join(dirname(__file__), '.env')  # Changed from '.variables' to '.env'
+    load_dotenv(dotenv_path)
+
+    spdc = os.environ.get('SP_DC')
+ 
+    sp = Spotify(spdc)
+
+    lyrics_data = sp.get_lyrics(song_id)
+
+    if lyrics_data:
+        print("Lyrics successfully downloaded")
+        return lyrics_data
+    else:
+        raise Exception("No lyrics found for this track.")
+
+
+

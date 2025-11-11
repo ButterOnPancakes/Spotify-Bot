@@ -1,8 +1,10 @@
-# Import everything needed to edit video clips
-import moviepy.editor as edit
+import moviepy as edit
+import os
 
 def add_subtitles_to_clip(subtitles, video_name):
-    baseVideo = edit.VideoFileClip('./videos/' + video_name)
+    os.makedirs('./output', exist_ok=True)
+
+    baseVideo = edit.VideoFileClip('videos/' + video_name)
     
     all_clips = []
     
@@ -16,19 +18,21 @@ def add_subtitles_to_clip(subtitles, video_name):
         if words == '': words = '♪'
         
         txt_clip = edit.TextClip(
-            txt = str(words), 
-            font = 'Arial Bold',
-            fontsize = 40, 
+            text = str(words), 
+            font_size = 40,
             color = 'white', 
-            stroke_color = 'white', 
-            stroke_width = 5
+            stroke_color = 'black', 
+            stroke_width = 5,
+            duration = nextTimeCode - timeCode,
         )
-        
-        txt_clip = txt_clip.set_duration(nextTimeCode - timeCode)
         
         all_clips.append(txt_clip)
     
-    text_overlay = edit.concatenate_videoclips(clips = all_clips).set_start(int(subtitles[0]['startTimeMs']) / 1000).set_pos('center')
+    text_overlay = edit.concatenate_videoclips(clips = all_clips).with_start(int(subtitles[0]['startTimeMs']) / 1000).with_position(('center', 'bottom'))
     
     video = edit.CompositeVideoClip([baseVideo, text_overlay])
-    video.write_videofile('./output/' + video_name)
+    video.write_videofile(
+        'output/' + video_name,
+        codec='libx264',
+        audio_codec='aac'
+    )

@@ -1,4 +1,7 @@
-.variables
+.env
+.venv
+output
+videos
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
